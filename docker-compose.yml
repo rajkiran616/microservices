@@ -1,0 +1,133 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: microservices-postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - microservices-network
+
+  # LocalStack for AWS services (SNS, SQS, S3)
+  localstack:
+    image: localstack/localstack:latest
+    container_name: microservices-localstack
+    ports:
+      - "4566:4566"
+    environment:
+      - SERVICES=sns,sqs,s3
+      - DEBUG=1
+      - DATA_DIR=/tmp/localstack/data
+      - AWS_DEFAULT_REGION=us-east-1
+    volumes:
+      - localstack-data:/tmp/localstack
+      - ./scripts/localstack-init.sh:/etc/localstack/init/ready.d/init.sh
+    networks:
+      - microservices-network
+
+  # Java Order Service
+  java-service:
+    build:
+      context: ./services/java-service
+      dockerfile: Dockerfile
+    container_name: order-service
+    ports:
+      - "8080:8080"
+    environment:
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=orderdb
+      - DB_USER=postgres
+      - DB_PASSWORD=postgres
+      - AWS_REGION=us-east-1
+      - SNS_TOPIC_ARN=arn:aws:sns:us-east-1:000000000000:order-events
+      - S3_BUCKET_NAME=orders-bucket
+      - AWS_ACCESS_KEY_ID=test
+      - AWS_SECRET_ACCESS_KEY=test
+    depends_on:
+      postgres:
+        condition: service_healthy
+      localstack:
+        condition: service_started
+    networks:
+      - microservices-network
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Node.js User Service
+  nodejs-service:
+    build:
+      context: ./services/nodejs-service
+      dockerfile: Dockerfile
+    container_name: user-service
+    ports:
+      - "3000:3000"
+    environment:
+      - PORT=3000
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=userdb
+      - DB_USER=postgres
+      - DB_PASSWORD=postgres
+      - AWS_REGION=us-east-1
+      - SQS_QUEUE_URL=http://localstack:4566/000000000000/order-notifications
+      - S3_BUCKET_NAME=users-bucket
+      - LOCALSTACK_ENDPOINT=http://localstack:4566
+      - AWS_ACCESS_KEY_ID=test
+      - AWS_SECRET_ACCESS_KEY=test
+    depends_on:
+      postgres:
+        condition: service_healthy
+      localstack:
+        condition: service_started
+    networks:
+      - microservices-network
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # React Frontend
+  react-frontend:
+    build:
+      context: ./frontend/react-app
+      dockerfile: Dockerfile.dev
+    container_name: react-frontend
+    ports:
+      - "3001:3000"
+    environment:
+      - REACT_APP_JAVA_SERVICE_URL=http://localhost:8080
+      - REACT_APP_NODEJS_SERVICE_URL=http://localhost:3000
+    volumes:
+      - ./frontend/react-app/src:/app/src
+      - ./frontend/react-app/public:/app/public
+    depends_on:
+      - java-service
+      - nodejs-service
+    networks:
+      - microservices-network
+
+networks:
+  microservices-network:
+    driver: bridge
+
+volumes:
+  postgres-data:
+  localstack-data:
