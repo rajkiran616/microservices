@@ -29,9 +29,21 @@ variable "availability_zones" {
 }
 
 variable "eks_cluster_version" {
-  description = "EKS cluster version"
+  description = "EKS cluster version (minimum 1.31 for Auto Mode)"
   type        = string
-  default     = "1.28"
+  default     = "1.31"
+}
+
+variable "enable_eks_auto_mode" {
+  description = "Enable EKS Auto Mode for automated node provisioning"
+  type        = bool
+  default     = false
+}
+
+variable "eks_auto_mode_node_pools" {
+  description = "Node pools for EKS Auto Mode"
+  type        = list(string)
+  default     = ["general-purpose"]
 }
 
 variable "eks_node_instance_types" {
@@ -73,6 +85,68 @@ variable "rds_username" {
 
 variable "acm_certificate_arn" {
   description = "ACM certificate ARN for ALB HTTPS"
+  type        = string
+  default     = ""
+}
+
+# Well-Architected Framework Variables
+variable "alert_emails" {
+  description = "List of email addresses for alerts and notifications"
+  type        = list(string)
+  default     = []
+}
+
+variable "monthly_budget_limit" {
+  description = "Monthly budget limit in USD for cost optimization"
+  type        = number
+  default     = 1000
+}
+
+variable "eks_monthly_budget_limit" {
+  description = "Monthly EKS budget limit in USD"
+  type        = number
+  default     = 400
+}
+
+variable "rds_monthly_budget_limit" {
+  description = "Monthly RDS budget limit in USD"
+  type        = number
+  default     = 300
+}
+
+# API Gateway Configuration
+variable "api_throttle_burst_limit" {
+  description = "API Gateway throttle burst limit"
+  type        = number
+  default     = 5000
+}
+
+variable "api_throttle_rate_limit" {
+  description = "API Gateway throttle rate limit (requests per second)"
+  type        = number
+  default     = 2000
+}
+
+variable "api_waf_rate_limit" {
+  description = "WAF rate limit per 5 minutes per IP"
+  type        = number
+  default     = 2000
+}
+
+variable "api_cors_allow_origins" {
+  description = "CORS allowed origins for API Gateway"
+  type        = list(string)
+  default     = ["*"]
+}
+
+variable "api_allowed_countries" {
+  description = "List of allowed country codes (ISO 3166-1 alpha-2). Empty = no restriction"
+  type        = list(string)
+  default     = []
+}
+
+variable "api_custom_domain_name" {
+  description = "Custom domain name for API Gateway"
   type        = string
   default     = ""
 }
